@@ -140,6 +140,38 @@ pip install nvidia-cuda-nvrtc-cu12
 `--gpu-batch` sets nonces per launch (default 1,048,576). Larger keeps the card busy;
 smaller hands control back sooner when the epoch rolls over.
 
+### WSL
+
+CUDA works from WSL2 — the Windows driver is passed through, and an RTX 4060 measured
+**473 MH/s** there. But the driver supplies only `libcuda`; `libnvrtc` comes with the
+toolkit, so it has to be fetched separately. Ubuntu 24.04 refuses a global `pip install`
+(PEP 668), and the library is the only part of the wheel that matters, so unpack it by
+hand — no sudo, nothing installed system-wide, and `rm -rf ~/.nonce-cuda` undoes it:
+
+```bash
+mkdir -p ~/.nonce-cuda && cd ~/.nonce-cuda && curl -sLO https://files.pythonhosted.org/packages/b8/85/e4af82cc9202023862090bfca4ea827d533329e925c758f0cde964cb54b7/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl && python3 -c "import zipfile,glob;zipfile.ZipFile(glob.glob('*.whl')[0]).extractall('.')" && rm -f *.whl
+```
+
+Build with a target directory outside `/mnt/c`. Building onto the Windows mount is slow and
+collides with the artefacts of a Windows build in the same tree:
+
+```bash
+CARGO_TARGET_DIR=~/nonce-target cargo build --release
+```
+
+Then point the loader at both libraries — nvrtc from above, `libcuda` from the WSL driver:
+
+```bash
+export LD_LIBRARY_PATH=$HOME/.nonce-cuda/nvidia/cuda_nvrtc/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH
+~/nonce-target/release/nonce-miner --gpu --rpc https://... --address 0x...
+```
+
+`cargo test --features gpu` runs the kernel parity tests for real once that path is set;
+without it they skip, and a skipped parity test proves nothing.
+
+One trap: a `.env` written on Windows has CRLF line endings, so a key sourced from it in
+WSL carries a trailing carriage return and is rejected as 33 bytes. `tr -d ''` first.
+
 ### Why the GPU is never trusted
 
 Every hit the kernel reports is **re-hashed on the CPU** before it is used. A wrong kernel
