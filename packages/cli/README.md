@@ -27,7 +27,15 @@ cd ../contracts && forge script script/DigestVectors.s.sol   # regenerate them
 
 Regenerate the vectors after any change to the preimage in `Nonce.sol`.
 
-## Build
+## Install
+
+One command, no clone:
+
+```bash
+cargo install --git https://github.com/noncepow/nonce-miners nonce-miner
+```
+
+To build from a checkout instead:
 
 ```bash
 cargo build --release
