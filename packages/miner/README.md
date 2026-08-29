@@ -1,4 +1,4 @@
-# @nonce/miner
+# @noncepow/miner
 
 Keccak256 proof-of-work miner for NONCE. Same core in the browser (Web Worker) and in Node.
 
@@ -15,7 +15,7 @@ because the failure looks like bad luck. So the digest is checked against vector
 by the contract itself rather than against a reimplementation:
 
 ```bash
-# regenerate from the contract repository: forge script script/DigestVectors.s.sol
+cd ../contracts && forge script script/DigestVectors.s.sol   # regenerate test/vectors.json
 node --test test/*.test.js
 ```
 
@@ -25,7 +25,7 @@ node --test test/*.test.js
 ## Usage
 
 ```js
-import { mineBatch, shouldSubmit, newEpochState } from "@nonce/miner";
+import { mineBatch, shouldSubmit, newEpochState } from "@noncepow/miner";
 
 const r = mineBatch({ challenge, miner, target, startNonce, batchSize: 20_000, best });
 ```
@@ -36,7 +36,7 @@ rewritten per attempt. Drive it from a worker, a Node loop, or a test.
 ### Browser
 
 ```js
-const w = new Worker(new URL("@nonce/miner/worker", import.meta.url), { type: "module" });
+const w = new Worker(new URL("@noncepow/miner/worker", import.meta.url), { type: "module" });
 w.postMessage({ type: "start", challenge, miner, target, epoch });
 w.onmessage = (e) => { /* "progress" | "solution" | "stopped" */ };
 w.postMessage({ type: "challenge", challenge: next, epoch: epoch + 1 });  // on epoch rollover
@@ -67,12 +67,15 @@ createStrategy({ maxSubmits: 10, rerollFactor: 2n, submitLeadMs: 6000, minScore:
 `minScore` skips submitting junk hashes entirely, which matters most when the token price is
 low relative to the fee.
 
-## Testing against a live epoch
+## Local run
 
 ```bash
-NONCE_ADDRESS=0x... NONCE_PRIVATE_KEY=0x...   node bin/mine.js --rpc https://... --lead-ms 60000
+anvil --port 8555 --block-time 1
+cd ../contracts && DEV_WALLET=0x... forge script script/Deploy.s.sol \
+  --rpc-url http://127.0.0.1:8555 --broadcast --private-key 0x...
+cd ../miner && NONCE_ADDRESS=0x... NONCE_PRIVATE_KEY=0x... \
+  node bin/mine.js --rpc http://127.0.0.1:8555 --lead-ms 60000
 ```
 
-`--lead-ms 60000` submits immediately rather than waiting out the 60-second epoch, which is
-what you want when checking the setup works. Leave it at the default when actually mining:
-holding the best hash until the epoch closes is what the fee is for.
+`--lead-ms 60000` makes it submit immediately instead of waiting out the 60-second epoch,
+which is what you want when testing rather than mining.

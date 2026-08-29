@@ -1,19 +1,51 @@
 {
-  "name": "@nonce/miner",
+  "name": "@noncepow/miner",
   "version": "0.1.0",
   "type": "module",
-  "description": "Keccak256 proof-of-work miner for NONCE — browser Web Worker and Node.",
+  "description": "Keccak256 proof-of-work miner for NONCE \u2014 browser Web Worker and Node.",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
     "./worker": "./src/worker.js"
   },
-  "bin": { "nonce-mine": "./bin/mine.js" },
+  "bin": {
+    "nonce-mine": "./bin/mine.js"
+  },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "vectors": "cd ../contracts && forge script script/DigestVectors.s.sol"
   },
   "dependencies": {
     "@noble/hashes": "^1.7.1",
     "viem": "^2.21.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noncepow/nonce-miners.git",
+    "directory": "packages/miner"
+  },
+  "homepage": "https://github.com/noncepow/nonce-miners#readme",
+  "bugs": {
+    "url": "https://github.com/noncepow/nonce-miners/issues"
+  },
+  "keywords": [
+    "nonce",
+    "proof-of-work",
+    "mining",
+    "keccak256",
+    "ethereum",
+    "robinhood-chain"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md"
+  ]
 }

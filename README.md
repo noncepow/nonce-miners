@@ -99,16 +99,14 @@ The same module drives the browser miner through a Web Worker. See
 `packages/mcp-server` exposes mining as MCP tools: status, protocol info, start and stop,
 claim, stake, unstake, and strategy tuning.
 
-```bash
-cd packages/mcp-server && pnpm install && pnpm build
-```
+Published to npm, so there is nothing to clone or build:
 
 ```json
 {
   "mcpServers": {
     "nonce": {
-      "command": "node",
-      "args": ["/path/to/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@noncepow/mcp-server"],
       "env": {
         "NONCE_RPC_URL": "https://...",
         "NONCE_ADDRESS": "0x...",

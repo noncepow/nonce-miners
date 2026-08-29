@@ -40,7 +40,7 @@ tool argument, and never print one back to the user.
   "mcpServers": {
     "nonce": {
       "command": "npx",
-      "args": ["-y", "@nonce/mcp-server"],
+      "args": ["-y", "@noncepow/mcp-server"],
       "env": {
         "NONCE_RPC_URL": "https://...",
         "NONCE_ADDRESS": "0x...",

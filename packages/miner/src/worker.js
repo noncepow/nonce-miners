@@ -6,7 +6,7 @@
  * a worker that blocks through a whole epoch would keep mining a stale
  * challenge and every solution it found would be rejected on chain.
  *
- *   const w = new Worker(new URL("@nonce/miner/worker", import.meta.url), { type: "module" });
+ *   const w = new Worker(new URL("@noncepow/miner/worker", import.meta.url), { type: "module" });
  *   w.postMessage({ type: "start", challenge, miner, target, epoch });
  *   w.onmessage = (e) => { ... };   // "progress" | "solution" | "stopped"
  */

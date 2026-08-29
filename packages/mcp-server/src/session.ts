@@ -1,4 +1,4 @@
-import { mineBatch, shouldSubmit, createStrategy } from "@nonce/miner";
+import { mineBatch, shouldSubmit, createStrategy } from "@noncepow/miner";
 
 import { type Chain, read, write } from "./chain.js";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@nonce/mcp-server",
+  "name": "@noncepow/mcp-server",
   "version": "0.1.0",
   "description": "Mine NONCE from any MCP-compatible agent.",
   "type": "module",
@@ -8,22 +8,48 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "@noncepow/miner": "workspace:*",
     "viem": "^2.21.0",
-    "zod": "^3.24.0",
-    "@nonce/miner": "workspace:*"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noncepow/nonce-miners.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/noncepow/nonce-miners#readme",
+  "bugs": {
+    "url": "https://github.com/noncepow/nonce-miners/issues"
+  },
+  "keywords": [
+    "nonce",
+    "mcp",
+    "model-context-protocol",
+    "proof-of-work",
+    "mining",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

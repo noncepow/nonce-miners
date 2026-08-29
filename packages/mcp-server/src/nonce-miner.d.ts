@@ -1,8 +1,8 @@
 /**
- * Types for @nonce/miner, which ships as plain ESM JavaScript so the browser
+ * Types for @noncepow/miner, which ships as plain ESM JavaScript so the browser
  * worker and the CLI can load it without a build step.
  */
-declare module "@nonce/miner" {
+declare module "@noncepow/miner" {
   export type Solution = { nonce: bigint; digest: string; score: bigint };
 
   export function mineBatch(args: {
