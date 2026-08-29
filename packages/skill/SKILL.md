@@ -57,6 +57,15 @@ tool argument, and never print one back to the user.
 seconds later rather than immediately — the first reading is taken over a fraction of a
 second and is meaningless.
 
+Leave `backend` on `auto` unless asked. It uses the `nonce-miner` binary when the machine
+has it, and the GPU when there is one: 475 MH/s on a CUDA card against 70 KH/s in-process.
+Since rewards are split by score, that gap decides whether mining covers its own fees.
+
+If `nonce_status` reports a hashrate in the tens of KH/s, the binary is not installed and
+the user is mining with the JavaScript fallback. Say so, and give them the one command:
+`cargo install --git https://github.com/noncepow/nonce-miners nonce-miner`. Do not let
+someone burn fees at 70 KH/s without knowing there is a 6,000x option.
+
 **Reporting progress.** `nonce_status` is the single source of truth. Two fields are
 routinely misread:
 

@@ -26,11 +26,15 @@ struct Args {
     command: Option<Command>,
 
     /// JSON-RPC endpoint
-    #[arg(long, env = "NONCE_RPC_URL")]
+    ///
+    /// `global` so it is accepted either side of a subcommand. Without it,
+    /// `nonce-miner status --rpc ...` is rejected as an unexpected argument,
+    /// which is exactly how someone would think to type it.
+    #[arg(long, env = "NONCE_RPC_URL", global = true)]
     rpc: Option<String>,
 
     /// NONCE token address
-    #[arg(long, env = "NONCE_ADDRESS")]
+    #[arg(long, env = "NONCE_ADDRESS", global = true)]
     address: Option<String>,
 
     /// Worker threads. Defaults to all cores but one, leaving the machine usable.

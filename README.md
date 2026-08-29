@@ -161,9 +161,24 @@ appears in a response, so an agent can drive mining without the key passing thro
 model's context. Without a key the server still runs, read-only — which is the right way to
 try it.
 
-**An agent mines on the CPU, at about 70 KH/s.** It does not use the GPU: the server runs
-the JavaScript miner in-process rather than driving the Rust binary. If you have a card,
-run `nonce-miner --gpu` yourself and let the agent handle status, claiming and staking.
+**An agent mines as fast as the machine it is on.** If the `nonce-miner` binary is
+installed the server drives it rather than mining in-process — measured on the same box:
+475 MH/s on a CUDA card, 17.8 MH/s on eleven CPU threads, against 70 KH/s for the
+JavaScript loop. Rewards are split by score, so that gap is the difference between mining
+and appearing to.
+
+`nonce_start_mining` takes a `backend`:
+
+| | |
+|---|---|
+| `auto` *(default)* | the binary if installed, with the GPU if there is one |
+| `gpu` | require the binary and CUDA; fail rather than quietly go slower |
+| `cpu` | the binary, all cores, no GPU |
+| `js` | the in-process JavaScript miner, nothing to install |
+
+Only one miner ever runs: two submitting from the same wallet would race for account
+nonces and lose transactions. The key reaches the binary through its environment, never on
+its command line.
 
 `packages/skill/SKILL.md` is the operating procedure that goes with those tools — what to
 check before spending anything, and the things people consistently misread:

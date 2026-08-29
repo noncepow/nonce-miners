@@ -17,6 +17,7 @@ import { z } from "zod";
 import { ConfigError, NoWalletError, loadConfig } from "./config.js";
 import { compact, connect, formatEth, formatToken, read, write, type Chain } from "./chain.js";
 import { MiningSession, shortError } from "./session.js";
+import { ExternalMiner, locateBinary, probeBinary } from "./external.js";
 
 /**
  * Taken from package.json rather than written out here. A second copy of the
@@ -73,6 +74,19 @@ async function main() {
 
   const chain: Chain = await connect(config);
   const session = new MiningSession(chain);
+
+  // Exactly one miner is ever active. Two of them submitting from the same
+  // address would race for account nonces and lose transactions.
+  let external: ExternalMiner | null = null;
+  const anyRunning = () => session.isRunning() || (external?.isRunning() ?? false);
+  const activeSnapshot = () => (external?.isRunning() ? external.snapshot() : session.snapshot());
+  const activeBackend = () =>
+    external?.isRunning() ? external.backend() : "JavaScript, 1 thread";
+  const stopAll = () => {
+    external?.stop();
+    external = null;
+    session.stop();
+  };
 
   const server = new McpServer({ name: "nonce-mcp-server", version: VERSION });
 
@@ -161,7 +175,7 @@ Examples:
 
         const endsAt = Number(genesis) + Number(epoch + 1n) * Number(epochDuration);
         const secondsLeft = Math.max(0, endsAt - Math.floor(Date.now() / 1000));
-        const mining = session.snapshot();
+        const mining = activeSnapshot();
 
         const data = {
           wallet,
@@ -174,6 +188,7 @@ Examples:
             submitsThisEpoch: mining.submitsThisEpoch,
             submitsTotal: mining.submitsTotal,
             lastError: mining.lastError,
+            backend: mining.running ? activeBackend() : null,
           },
           rewards,
           eth,
@@ -184,7 +199,7 @@ Examples:
           wallet ? `Wallet \`${wallet}\`` : "_Read-only: no wallet configured._",
           "",
           mining.running
-            ? `Hashrate ${compact(mining.hashrate)}H/s · best score ${mining.bestScore ? compact(Number(mining.bestScore)) : "none yet"} · submits ${mining.submitsThisEpoch}/10 this epoch`
+            ? `Hashrate ${compact(mining.hashrate)}H/s · ${activeBackend()} · best score ${mining.bestScore ? compact(Number(mining.bestScore)) : "none yet"} · submits ${mining.submitsThisEpoch}/10 this epoch`
             : "Not mining. Use `nonce_start_mining` to begin.",
           "",
           `Unclaimed **${rewards.unclaimed} NONCE** · wallet ${rewards.balance} · staked ${rewards.staked}`,
@@ -291,11 +306,19 @@ Examples:
 
 Mining runs until stopped. Each submission costs a small ETH fee on top of gas, so the wallet must hold ETH. Solutions are bound to the wallet address and cannot be used by anyone else.
 
+Backends, fastest first. If the nonce-miner binary is installed this server drives it instead of mining in-process, which is the difference between 470 MH/s and 70 KH/s — rewards are split by score, so that gap decides whether mining is worth the fees at all.
+
+  - 'auto'  (default) use the binary if it is installed, with the GPU if there is one
+  - 'gpu'   require the binary and a CUDA device; fails if either is missing
+  - 'cpu'   the binary, all cores, no GPU
+  - 'js'    the in-process JavaScript miner, ~70 KH/s, no install needed
+
 Args:
+  - backend ('auto' | 'gpu' | 'cpu' | 'js'): which miner to use (default: 'auto')
   - response_format ('markdown' | 'json'): output format (default: 'markdown')
 
 Returns:
-  { "started": boolean, "alreadyRunning": boolean, "wallet": string, "epoch": string }
+  { "started": boolean, "alreadyRunning": boolean, "wallet": string, "epoch": string, "backend": string }
 
 Examples:
   - Use when: "mine NONCE for me"
@@ -303,15 +326,20 @@ Examples:
 
 Error Handling:
   - Returns a read-only error if NONCE_PRIVATE_KEY was not set for the server
-  - Warns when the wallet holds no ETH, since every submission needs a fee`,
-      inputSchema: { response_format: ResponseFormat },
+  - Warns when the wallet holds no ETH, since every submission needs a fee
+  - backend 'gpu' fails rather than quietly falling back to something slower`,
+      inputSchema: {
+        backend: z.enum(["auto", "gpu", "cpu", "js"]).default("auto")
+          .describe("Which miner to run; 'auto' picks the fastest available"),
+        response_format: ResponseFormat,
+      },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ response_format }) =>
+    async ({ backend, response_format }) =>
       guarded(async () => {
         if (!chain.account) throw new NoWalletError("mine");
 
-        const already = session.isRunning();
+        const already = anyRunning();
         const [balance, fee, epoch] = await Promise.all([
           chain.publicClient.getBalance({ address: chain.account }),
           read<bigint>(chain, "submitFee"),
@@ -323,17 +351,54 @@ Error Handling:
           );
         }
 
-        if (!already) await session.start();
+        if (!already) {
+          const wanted = backend ?? "auto";
+          const bin = wanted === "js" ? null : locateBinary();
 
+          if (wanted === "gpu" && !bin) {
+            return failure(
+              "backend 'gpu' needs the nonce-miner binary, which is not on PATH. Install it with " +
+                "`cargo install --git https://github.com/noncepow/nonce-miners nonce-miner`, " +
+                "or set NONCE_MINER_BIN to its path."
+            );
+          }
+
+          if (bin) {
+            // Only probe when a GPU might be used: it spawns the binary, and for
+            // an explicit 'cpu' the answer would change nothing.
+            const gpu =
+              wanted === "cpu" ? null : probeBinary(bin, config.rpcUrl, config.nonceAddress).gpu;
+            if (wanted === "gpu" && !gpu) {
+              return failure(
+                "backend 'gpu' was asked for, but the binary reports no usable CUDA device. " +
+                  "Run `nonce-miner status` to see why, or use backend 'cpu'."
+              );
+            }
+            external = new ExternalMiner({
+              bin,
+              rpcUrl: config.rpcUrl,
+              address: config.nonceAddress,
+              privateKey: config.privateKey as string,
+              gpu: Boolean(gpu),
+              strategy: session.setStrategy({}),
+            });
+            external.start();
+          } else {
+            await session.start();
+          }
+        }
+
+        const chosen = activeBackend();
         const data = {
           started: !already,
           alreadyRunning: already,
           wallet: chain.account,
           epoch: epoch.toString(),
+          backend: chosen,
         };
         const md = already
-          ? `Already mining as \`${chain.account}\` (epoch ${epoch}).`
-          : `Mining started as \`${chain.account}\` at epoch ${epoch}. Fee ${formatEth(fee)} ETH per submission; balance ${formatEth(balance)} ETH.`;
+          ? `Already mining as \`${chain.account}\` (epoch ${epoch}, ${chosen}).`
+          : `Mining started as \`${chain.account}\` at epoch ${epoch} on **${chosen}**. Fee ${formatEth(fee)} ETH per submission; balance ${formatEth(balance)} ETH.`;
         return reply(response_format, md, data);
       })
   );
@@ -355,9 +420,9 @@ Returns:
     },
     async ({ response_format }) =>
       guarded(async () => {
-        const was = session.isRunning();
-        const snap = session.snapshot();
-        session.stop();
+        const was = anyRunning();
+        const snap = activeSnapshot();
+        stopAll();
         const data = {
           stopped: true,
           wasRunning: was,
@@ -611,7 +676,7 @@ Examples:
   await server.connect(transport);
 
   const shutdown = () => {
-    session.stop();
+    stopAll();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

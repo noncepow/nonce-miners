@@ -37,6 +37,27 @@ passing through a model's context.
 Without it the server still runs, read-only: status and protocol info work, mining and
 claiming do not. That is the right way to try it.
 
+## Speed
+
+The server mines in-process at about 70 KH/s. If the `nonce-miner` binary is on `PATH`
+(or `NONCE_MINER_BIN` points at it) the server drives that instead, which on the same
+machine measured **475 MH/s** on a CUDA card and **17.8 MH/s** on eleven CPU threads.
+
+```bash
+cargo install --git https://github.com/noncepow/nonce-miners nonce-miner
+```
+
+`nonce_start_mining` takes a `backend` of `auto` (default), `gpu`, `cpu` or `js`. `auto`
+uses the binary when it is there and the GPU when there is one; `gpu` fails rather than
+quietly falling back to something slower.
+
+Rewards are split by score, so this is not a nice-to-have: an agent at 70 KH/s against
+GPU miners earns a rounding error.
+
+Only one miner runs at a time. Two submitting from the same wallet would race for account
+nonces and lose transactions. The private key is handed to the binary in its environment,
+never on its command line, so it stays out of the process listing.
+
 ## Before you spend anything
 
 Every submission costs an ETH fee **on top of gas**, so a wallet with no ETH cannot mine
