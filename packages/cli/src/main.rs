@@ -9,24 +9,29 @@
 // re-declaring them here would compile a second, separate copy.
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use primitive_types::U256;
 
 use nonce_miner::miner::{Job, Session};
 use nonce_miner::rpc::{call_data, Rpc};
 use nonce_miner::strategy::{should_submit, Strategy};
+use nonce_miner::keystore;
 use nonce_miner::wallet::{Tx, Wallet};
 
 #[derive(Parser)]
 #[command(name = "nonce-miner", version, about = "Proof-of-work miner for NONCE")]
 struct Args {
+    /// Manage the encrypted keystore. Omit to mine.
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// JSON-RPC endpoint
     #[arg(long, env = "NONCE_RPC_URL")]
-    rpc: String,
+    rpc: Option<String>,
 
     /// NONCE token address
     #[arg(long, env = "NONCE_ADDRESS")]
-    address: String,
+    address: Option<String>,
 
     /// Worker threads. Defaults to all cores but one, leaving the machine usable.
     #[arg(long)]
@@ -62,6 +67,33 @@ struct Args {
     /// back sooner when the epoch rolls over.
     #[arg(long, default_value_t = 1_048_576)]
     gpu_batch: u32,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Create, import, or inspect the encrypted mining key
+    Wallet {
+        #[command(subcommand)]
+        action: WalletAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum WalletAction {
+    /// Generate a new key and store it encrypted
+    New {
+        /// Replace an existing keystore. The key it holds is gone afterwards.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Import an existing key, typed without echo
+    Import {
+        /// Replace an existing keystore. The key it holds is gone afterwards.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Print the stored address without decrypting the key
+    Address,
 }
 
 /// One search, whichever backend is driving it.
@@ -102,6 +134,26 @@ fn main() {
     }
 }
 
+fn wallet_command(action: &WalletAction) -> Result<(), String> {
+    match action {
+        WalletAction::New { force } => {
+            let w = keystore::create(*force)?;
+            println!("address  0x{}", hex::encode(w.address));
+            println!("keystore {}", keystore::path().display());
+            println!();
+            println!("Fund this address before mining — every submission costs an ETH fee on top");
+            println!("of gas. There is no copy of the password; without it the key is gone.");
+        }
+        WalletAction::Import { force } => {
+            let w = keystore::import(*force)?;
+            println!("address  0x{}", hex::encode(w.address));
+            println!("keystore {}", keystore::path().display());
+        }
+        WalletAction::Address => println!("{}", keystore::stored_address()?),
+    }
+    Ok(())
+}
+
 fn parse_address(s: &str) -> Result<[u8; 20], String> {
     let b = hex::decode(s.trim().trim_start_matches("0x")).map_err(|_| "address is not hex")?;
     if b.len() != 20 {
@@ -115,14 +167,26 @@ fn parse_address(s: &str) -> Result<[u8; 20], String> {
 fn run() -> Result<(), String> {
     let args = Args::parse();
 
-    // The key comes from the environment only — never an argument, so it cannot
-    // land in shell history or a process listing.
-    let key = std::env::var("NONCE_PRIVATE_KEY")
-        .map_err(|_| "set NONCE_PRIVATE_KEY (never pass a key on the command line)".to_string())?;
-    let wallet = Wallet::from_hex(&key)?;
+    if let Some(Command::Wallet { action }) = &args.command {
+        return wallet_command(action);
+    }
 
-    let token = parse_address(&args.address)?;
-    let rpc = Rpc::new(&args.rpc);
+    // Never an argument, so the key cannot land in shell history or a process
+    // listing. The environment still wins, so existing setups keep working; the
+    // keystore is the fallback for everyone who would otherwise have kept the
+    // key in a shell profile in the clear.
+    let wallet = match std::env::var("NONCE_PRIVATE_KEY") {
+        Ok(key) => Wallet::from_hex(&key)?,
+        Err(_) => keystore::load()?,
+    };
+
+    let address = args
+        .address
+        .as_deref()
+        .ok_or("set --address (or NONCE_ADDRESS) to the NONCE token")?;
+    let rpc_url = args.rpc.as_deref().ok_or("set --rpc (or NONCE_RPC_URL)")?;
+    let token = parse_address(address)?;
+    let rpc = Rpc::new(rpc_url);
     let threads = args
         .threads
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1)));

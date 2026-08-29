@@ -2,6 +2,7 @@
 //! hash and the search without going through the binary.
 
 pub mod hash;
+pub mod keystore;
 
 #[cfg(feature = "gpu")]
 pub mod gpu;

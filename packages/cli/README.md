@@ -39,15 +39,42 @@ cargo build --release
 `winget install -e --id BrechtSanders.WinLibs.POSIX.MSVCRT` — and put its `bin` on PATH.
 The MSVCRT variant is the one that matches the `-gnu` target; UCRT does not.
 
+## Wallet
+
+```bash
+nonce-miner wallet new              # generate a key
+nonce-miner wallet import           # bring an existing one
+nonce-miner wallet address          # who am I, without typing a password
+```
+
+The key is encrypted with a password into the [Web3 Secret Storage] format — scrypt,
+AES-128-CTR, keccak MAC — the same V3 file geth, foundry and MetaMask read, so a key
+created here is not trapped here. It lives at `~/.nonce/keystore.json`; `NONCE_KEYSTORE`
+points somewhere else, which is how you keep more than one.
+
+Passwords and imported keys are typed, never passed as arguments, so neither reaches shell
+history or a process listing. There is no copy of the password anywhere: lose it and the
+key is gone. `wallet new` over an existing keystore is refused unless you pass `--force`,
+which really does discard the old key.
+
+[Web3 Secret Storage]: https://ethereum.org/en/developers/docs/data-structures-and-encoding/web3-secret-storage/
+
 ## Run
+
+```bash
+nonce-miner --rpc https://... --address 0x...
+```
+
+The keystore password is prompted for at startup. `NONCE_PRIVATE_KEY` still takes
+precedence when it is set, so existing setups keep working unchanged:
 
 ```bash
 export NONCE_PRIVATE_KEY=0x...
 nonce-miner --rpc https://... --address 0x...
 ```
 
-The key is read from the environment only. It is never an argument, so it cannot end up in
-shell history or a process listing, and it is never printed.
+Either way the key is never an argument, so it cannot end up in shell history or a process
+listing, and it is never printed.
 
 | Flag | Default | |
 |---|---|---|

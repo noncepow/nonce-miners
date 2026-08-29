@@ -46,10 +46,13 @@ do N threads of distinct work.
 cd packages/cli
 cargo build --release
 
-export NONCE_PRIVATE_KEY=0x...
+./target/release/nonce-miner wallet new          # or `wallet import`
 ./target/release/nonce-miner --rpc https://... --address 0x...   # CPU
 ./target/release/nonce-miner --gpu --rpc https://... --address 0x...   # CUDA
 ```
+
+`wallet new` writes an encrypted V3 keystore to `~/.nonce/keystore.json` and prompts for
+its password when mining starts. `NONCE_PRIVATE_KEY` still takes precedence when set.
 
 | Backend | Hashrate |
 |---|---|

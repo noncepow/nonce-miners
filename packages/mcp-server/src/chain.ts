@@ -68,6 +68,8 @@ export async function write(
   value?: bigint
 ): Promise<{ hash: Hash; gasUsed: bigint; status: "success" | "reverted" }> {
   if (!chain.walletClient || !chain.account) throw new NoWalletError(action);
+  const signer = chain.walletClient.account;
+  if (!signer) throw new NoWalletError(action);
 
   const hash = await chain.walletClient.writeContract({
     address: chain.address,
@@ -75,7 +77,11 @@ export async function write(
     functionName,
     args,
     value,
-    account: chain.account,
+    // The wallet client already holds the local signing account. Passing
+    // `chain.account` here hands viem a bare address, which it reads as an
+    // account the *node* manages and routes to eth_sendTransaction — but the
+    // RPC holds no key, so every write failed before it was ever broadcast.
+    account: signer,
     chain: null,
   });
   const receipt = await chain.publicClient.waitForTransactionReceipt({ hash });
