@@ -81,6 +81,8 @@ enum Command {
         #[command(subcommand)]
         action: WalletAction,
     },
+    /// Check everything mining needs, without mining or spending anything
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -170,6 +172,144 @@ fn wallet_command(action: &WalletAction) -> Result<(), String> {
     Ok(())
 }
 
+
+/// Wei as ETH, six decimals — enough to see a submission fee, short enough to read.
+fn fmt_eth(wei: U256) -> String {
+    let one = U256::from(10u64).pow(U256::from(18u64));
+    let micro = U256::from(10u64).pow(U256::from(12u64));
+    format!("{}.{:06}", wei / one, ((wei % one) / micro).as_u64())
+}
+
+/// " (~N submissions)" — the number people actually want from a balance.
+fn affordable(balance: U256, fee: U256) -> String {
+    if fee.is_zero() {
+        return String::new();
+    }
+    // Gas is small next to the fee on this chain, but not nothing; count it in
+    // roughly so the figure is not quietly optimistic.
+    let per = fee + fee / U256::from(5u64);
+    format!("  (~{} submissions)", (balance / per).as_u64())
+}
+
+fn confirm(question: &str) -> Result<bool, String> {
+    use std::io::Write;
+    print!("{question} [y/N] ");
+    std::io::stdout().flush().map_err(|e| e.to_string())?;
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
+    let a = line.trim().to_ascii_lowercase();
+    Ok(a == "y" || a == "yes")
+}
+
+fn getting_started() -> String {
+    // Built line by line rather than as one continued literal: a `\` continuation
+    // keeps the source indentation, which lands in the user's terminal.
+    let lines = [
+        "",
+        "nonce-miner is not configured yet. The whole path, in order:",
+        "",
+        "  1. a wallet     nonce-miner wallet new",
+        "  2. fund it      every submission costs an ETH fee on top of gas",
+        "  3. the chain    export NONCE_RPC_URL=https://...",
+        "                  export NONCE_ADDRESS=0x...",
+        "  4. mine         nonce-miner            (CPU)",
+        "                  nonce-miner --gpu      (CUDA)",
+        "",
+        "  nonce-miner status   checks all of it without spending anything",
+        "",
+    ];
+    format!("{}
+  keystore: {}
+
+", lines.join("
+"), keystore::path().display())
+}
+
+/// Read-only preflight: everything mining needs, checked and reported together,
+/// so a problem is found before a fee is ever paid.
+fn status_command(args: &Args) -> Result<(), String> {
+    let present = |v: &Option<String>| -> Option<String> {
+        v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned)
+    };
+
+    println!("wallet");
+    let who = match std::env::var("NONCE_PRIVATE_KEY") {
+        Ok(k) => match Wallet::from_hex(&k) {
+            Ok(w) => {
+                println!("  ok   0x{} (from NONCE_PRIVATE_KEY)", hex::encode(w.address));
+                Some(w.address)
+            }
+            Err(e) => {
+                println!("  bad  NONCE_PRIVATE_KEY is set but unusable: {e}");
+                None
+            }
+        },
+        Err(_) => match keystore::stored_address() {
+            // Read from the keystore file, so this never asks for a password.
+            Ok(a) => {
+                println!("  ok   {a}");
+                parse_address(&a).ok()
+            }
+            Err(_) => {
+                println!("  none no wallet yet — `nonce-miner wallet new`");
+                None
+            }
+        },
+    };
+
+    let (Some(address), Some(rpc_url)) = (present(&args.address), present(&args.rpc)) else {
+        println!("
+chain");
+        println!("  none set NONCE_RPC_URL and NONCE_ADDRESS (or --rpc and --address)");
+        eprint!("{}", getting_started());
+        return Err("not configured yet".into());
+    };
+
+    let token = parse_address(&address)?;
+    let rpc = Rpc::new(&rpc_url);
+
+    println!("
+chain");
+    let chain_id = rpc.chain_id().map_err(|e| format!("cannot reach the RPC: {e}"))?;
+    println!("  ok   connected, chain {chain_id}");
+    let epoch = rpc
+        .view(&token, &call_data("currentEpoch()", &[]))
+        .map_err(|_| format!("no NONCE contract at {address} on chain {chain_id}"))?;
+    let fee = rpc.view(&token, &call_data("submitFee()", &[])).map_err(|e| e.to_string())?;
+    let supply = rpc.view(&token, &call_data("totalSupply()", &[])).map_err(|e| e.to_string())?;
+    let max = rpc.view(&token, &call_data("MAX_SUPPLY()", &[])).map_err(|e| e.to_string())?;
+    println!("  ok   NONCE at {address}");
+    println!("  ok   epoch {epoch}, fee {} ETH per submission", fmt_eth(fee));
+    let wad = U256::from(10u64).pow(U256::from(18u64));
+    println!("  ok   minted {} of {}", supply / wad, max / wad);
+
+    println!("
+balance");
+    match who {
+        Some(addr) => {
+            let bal = rpc.balance(&addr).map_err(|e| e.to_string())?;
+            if bal.is_zero() {
+                println!("  none 0 ETH — fund the wallet before mining");
+            } else {
+                println!("  ok   {} ETH{}", fmt_eth(bal), affordable(bal, fee));
+            }
+        }
+        None => println!("  n/a  no wallet to check"),
+    }
+
+    #[cfg(feature = "gpu")]
+    {
+        println!("
+GPU");
+        match nonce_miner::gpu::Gpu::new() {
+            Ok(g) => println!("  ok   {} — run with --gpu", g.name),
+            Err(e) => println!("  none {e}"),
+        }
+    }
+
+    Ok(())
+}
+
 fn parse_address(s: &str) -> Result<[u8; 20], String> {
     let b = hex::decode(s.trim().trim_start_matches("0x")).map_err(|_| "address is not hex")?;
     if b.len() != 20 {
@@ -183,8 +323,10 @@ fn parse_address(s: &str) -> Result<[u8; 20], String> {
 fn run() -> Result<(), String> {
     let args = Args::parse();
 
-    if let Some(Command::Wallet { action }) = &args.command {
-        return wallet_command(action);
+    match &args.command {
+        Some(Command::Wallet { action }) => return wallet_command(action),
+        Some(Command::Status) => return status_command(&args),
+        None => {}
     }
 
     // Arguments before the wallet: unlocking the keystore prompts for a
@@ -198,9 +340,15 @@ fn run() -> Result<(), String> {
     let present = |v: &Option<String>| -> Option<String> {
         v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned)
     };
-    let address =
-        present(&args.address).ok_or("set --address, or NONCE_ADDRESS — it is empty or unset")?;
-    let rpc_url = present(&args.rpc).ok_or("set --rpc, or NONCE_RPC_URL — it is empty or unset")?;
+    let (address, rpc_url) = match (present(&args.address), present(&args.rpc)) {
+        (Some(a), Some(r)) => (a, r),
+        // Reporting only the first missing piece makes setup a queue of walls,
+        // each discovered by hitting it. Show the whole path once.
+        _ => {
+            eprint!("{}", getting_started());
+            return Err("not configured yet".into());
+        }
+    };
     let token = parse_address(&address)?;
 
     // Never an argument, so the key cannot land in shell history or a process
@@ -209,6 +357,28 @@ fn run() -> Result<(), String> {
     // key in a shell profile in the clear.
     let wallet = match std::env::var("NONCE_PRIVATE_KEY") {
         Ok(key) => Wallet::from_hex(&key)?,
+        Err(_) if !keystore::exists() => {
+            // Being told the name of a command you must now go and run is a poor
+            // answer to "I have no wallet". Offer to do it, when there is
+            // someone there to answer.
+            use std::io::IsTerminal;
+            if !std::io::stdin().is_terminal() {
+                return Err(format!(
+                    "no wallet. Run `nonce-miner wallet new`, or set NONCE_PRIVATE_KEY (looked in {})",
+                    keystore::path().display()
+                ));
+            }
+            println!("No wallet yet at {}.", keystore::path().display());
+            if !confirm("Create one now?")? {
+                return Err("no wallet, so there is nothing to mine with".into());
+            }
+            let w = keystore::create(false)?;
+            println!("
+address 0x{}", hex::encode(w.address));
+            println!("Fund this address before mining — submissions cost ETH.
+");
+            w
+        }
         Err(_) => keystore::load()?,
     };
 
@@ -240,13 +410,16 @@ fn run() -> Result<(), String> {
     } else {
         println!("backend  CPU, {threads} threads");
     }
-    println!("epoch    {epoch_duration}s   fee {} wei/submit", fee);
-    println!("balance  {} wei", balance);
+    println!("epoch    {epoch_duration}s   fee {} ETH per submission", fmt_eth(fee));
+    println!("balance  {} ETH{}", fmt_eth(balance), affordable(balance, fee));
     if balance.is_zero() {
-        return Err("wallet holds no ETH; every submission costs a fee plus gas".into());
+        return Err(
+            "this wallet holds no ETH. Every submission costs a fee on top of gas, so mining              cannot start until it is funded"
+                .into(),
+        );
     }
     if !fee.is_zero() && balance < fee * U256::from(10) {
-        eprintln!("warning: balance covers fewer than 10 submissions");
+        eprintln!("warning: this covers fewer than 10 submissions — top up soon");
     }
 
     let strategy = Strategy {

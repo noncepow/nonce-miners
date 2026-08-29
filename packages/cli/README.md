@@ -75,8 +75,20 @@ which really does discard the old key.
 ## Run
 
 ```bash
+nonce-miner status                                # check before spending anything
 nonce-miner --rpc https://... --address 0x...
 ```
+
+`status` is a read-only preflight. It reports whether the chain is reachable, whether there
+is a contract at that address, what an epoch currently pays, whether the wallet has a
+usable key, how many submissions its balance covers, and whether a GPU is actually
+available — each of which otherwise costs a failed run to discover. It reads the address
+out of the keystore file, so it never asks for the password.
+
+Run with nothing configured and the miner prints the whole setup path at once, rather than
+one missing piece at a time. With no wallet and a terminal attached it offers to create
+one; piped or in CI it says what to run instead of waiting for an answer nobody is there
+to give.
 
 The keystore password is prompted for at startup. `NONCE_PRIVATE_KEY` still takes
 precedence when it is set, so existing setups keep working unchanged:

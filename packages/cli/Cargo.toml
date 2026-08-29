@@ -1,6 +1,6 @@
 [package]
 name = "nonce-miner"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Multi-threaded keccak256 proof-of-work miner for NONCE."
 license = "MIT"
