@@ -129,9 +129,10 @@ is quoted.
 
 | Backend | Hashrate |
 |---|---|
-| Browser / Node, 1 thread | 70 KH/s |
-| Rust CPU, 4 threads | 8.36 MH/s |
-| CUDA, RTX 4060 | **470 MH/s** |
+| Node / browser CPU, 1 thread | 129 KH/s |
+| Browser WebGPU, RTX 4060 | 30 MH/s |
+| Rust CPU, 11 threads | 17.8 MH/s |
+| CUDA, RTX 4060 | **475 MH/s** |
 
 Measured with the card to itself. Two miners sharing one GPU get about half each, which
 looks like a regression if you are not expecting it.
@@ -168,6 +169,16 @@ npx -y @noncepow/miner --rpc https://... --address 0x...
 
 Reads `NONCE_PRIVATE_KEY` from the environment. The same module drives the browser miner
 through a Web Worker — see [packages/miner/README.md](packages/miner/README.md).
+
+In the browser the site uses WebGPU when the machine has it, and falls back to those
+workers when it does not: 30 MH/s against 129 KH/s per thread. WGSL has no 64-bit integer
+and keccak-f[1600] is defined entirely on 64-bit lanes, so every lane is a pair of u32 and
+every rotation is done by hand — which is why it lands well short of the CUDA path.
+
+The site has a `/gpu-check` page that runs the browser's own kernel against the same 64
+contract-produced vectors, reading digests straight out of the GPU buffer. Drivers and
+browsers differ, and a kernel that disagrees by one byte costs a fee on every attempt while
+looking like bad luck, so the check belongs on the machine that will do the mining.
 
 ---
 
