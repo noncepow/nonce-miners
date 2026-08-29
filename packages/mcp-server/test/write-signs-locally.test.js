@@ -18,7 +18,11 @@ import { connect, write } from "../dist/chain.js";
 
 // Anvil's first well-known development key. Never used for anything real.
 const TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const NONCE_ADDRESS = "0x0881bc084ad3eE326Fad8af382A5dE84A06F2944";
+// A fixture, not a deployment: this test answers its own RPC, so the address
+// only has to be well-formed. A real one here would go stale and send people
+// looking for a contract that is not there.
+// All lower case: viem validates the checksum of any mixed-case address.
+const NONCE_ADDRESS = "0x00000000000000000000000000000000000cafe1";
 
 /** Records every JSON-RPC method it is asked for and answers plausibly. */
 function fakeRpc() {
