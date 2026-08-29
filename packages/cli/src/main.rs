@@ -94,6 +94,8 @@ enum WalletAction {
     },
     /// Print the stored address without decrypting the key
     Address,
+    /// Reveal the private key, so the wallet can be moved elsewhere
+    Export,
 }
 
 /// One search, whichever backend is driving it.
@@ -150,6 +152,15 @@ fn wallet_command(action: &WalletAction) -> Result<(), String> {
             println!("keystore {}", keystore::path().display());
         }
         WalletAction::Address => println!("{}", keystore::stored_address()?),
+        WalletAction::Export => {
+            let key = keystore::export()?;
+            // Warning on stderr, key on stdout: `wallet export > key.txt` then
+            // writes the key and nothing else, and the warning is still seen.
+            eprintln!("This is the key itself — whoever reads it owns the wallet.");
+            eprintln!("It will stay in this terminal's scrollback until you clear it.");
+            eprintln!();
+            println!("{key}");
+        }
     }
     Ok(())
 }

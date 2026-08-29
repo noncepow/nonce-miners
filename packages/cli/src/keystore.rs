@@ -137,6 +137,30 @@ pub fn load() -> Result<Wallet, String> {
     load_with_password(&password)
 }
 
+/// Reveal the private key, prompting for the password.
+///
+/// The counterpart to `import`: a key that cannot be taken back out is a key
+/// held hostage by this tool. It is returned rather than printed here so the
+/// caller decides where it goes — the caller sends it to stdout alone, with the
+/// warning on stderr, so redirecting to a file captures the key and nothing else.
+pub fn export() -> Result<String, String> {
+    let p = path();
+    if !p.is_file() {
+        return Err(format!("no keystore at {}", p.display()));
+    }
+    let password = read_secret("Keystore password: ")?;
+    export_with_password(&password)
+}
+
+/// The body of [`export`], with the password supplied rather than prompted.
+pub fn export_with_password(password: &str) -> Result<String, String> {
+    let secret = eth_keystore::decrypt_key(path(), password)
+        .map_err(|_| "wrong password, or the keystore is corrupt".to_string())?;
+    // Refuse to hand back something that is not a usable key.
+    Wallet::from_hex(&hex::encode(&secret))?;
+    Ok(format!("0x{}", hex::encode(secret)))
+}
+
 /// The body of [`load`], with the password supplied rather than prompted.
 pub fn load_with_password(password: &str) -> Result<Wallet, String> {
     let secret = eth_keystore::decrypt_key(path(), password)

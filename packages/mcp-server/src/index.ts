@@ -5,6 +5,10 @@
  * stdio transport: the server holds a private key and runs a miner, so it is a
  * local process, not a remote endpoint.
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { parseEther } from "viem";
@@ -13,6 +17,22 @@ import { z } from "zod";
 import { ConfigError, NoWalletError, loadConfig } from "./config.js";
 import { compact, connect, formatEth, formatToken, read, write, type Chain } from "./chain.js";
 import { MiningSession, shortError } from "./session.js";
+
+/**
+ * Taken from package.json rather than written out here. A second copy of the
+ * number drifts the first time a release forgets it, and then the version a
+ * client is told it is talking to is not the version it is running — which is
+ * exactly the wrong thing to be unsure of while debugging one.
+ */
+const VERSION: string = (() => {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const raw = readFileSync(join(here, "..", "package.json"), "utf8");
+    return (JSON.parse(raw).version as string | undefined) ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 const ResponseFormat = z.enum(["markdown", "json"]).default("markdown");
 type Format = z.infer<typeof ResponseFormat>;
@@ -54,7 +74,7 @@ async function main() {
   const chain: Chain = await connect(config);
   const session = new MiningSession(chain);
 
-  const server = new McpServer({ name: "nonce-mcp-server", version: "0.1.0" });
+  const server = new McpServer({ name: "nonce-mcp-server", version: VERSION });
 
   // -------------------------------------------------------------------
   server.registerTool(

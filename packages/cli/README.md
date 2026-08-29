@@ -45,7 +45,12 @@ The MSVCRT variant is the one that matches the `-gnu` target; UCRT does not.
 nonce-miner wallet new              # generate a key
 nonce-miner wallet import           # bring an existing one
 nonce-miner wallet address          # who am I, without typing a password
+nonce-miner wallet export           # take the key back out
 ```
+
+`export` prints the key on stdout and its warning on stderr, so
+`wallet export > key.txt` writes the key and nothing else. It is the counterpart to
+`import`: a key that cannot be taken out again is a key held hostage by this tool.
 
 The key is encrypted with a password into the [Web3 Secret Storage] format — scrypt,
 AES-128-CTR, keccak MAC — the same V3 file geth, foundry and MetaMask read, so a key

@@ -58,6 +58,38 @@ fn an_imported_key_decrypts_back_to_the_same_wallet() {
     );
 }
 
+/// A key that cannot be taken back out is a key held hostage by this tool.
+#[test]
+fn an_imported_key_can_be_exported_unchanged() {
+    let _g = serialize();
+    let _s = Scratch::new("export");
+
+    keystore::import_with_password(KEY, "pw", false).expect("import");
+
+    let exported = keystore::export_with_password("pw").expect("export");
+    assert_eq!(exported, KEY, "the exported key is not the key that went in");
+
+    assert!(
+        keystore::export_with_password("wrong").is_err(),
+        "the wrong password must not reveal the key"
+    );
+}
+
+/// A generated key must be exportable too, or it could only ever be used here.
+#[test]
+fn a_generated_key_can_be_exported_and_reimported() {
+    let _g = serialize();
+    let _s = Scratch::new("exportgen");
+
+    let made = keystore::create_with_password("pw", false).expect("generate");
+    let exported = keystore::export_with_password("pw").expect("export");
+
+    // Round trip it through a fresh keystore: same key, same address.
+    let reimported =
+        keystore::import_with_password(&exported, "other", true).expect("reimport");
+    assert_eq!(made.address, reimported.address, "the round trip changed the key");
+}
+
 #[test]
 fn the_wrong_password_does_not_yield_a_wallet() {
     let _g = serialize();
