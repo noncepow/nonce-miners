@@ -22,7 +22,7 @@ the EVM is the authority.
 
 ```bash
 cargo test                                        # includes the parity vectors
-# regenerate from the contract repository: forge script script/DigestVectors.s.sol
+cd ../contracts && forge script script/DigestVectors.s.sol   # regenerate them
 ```
 
 Regenerate the vectors after any change to the preimage in `Nonce.sol`.
@@ -55,8 +55,15 @@ shell history or a process listing, and it is never printed.
 | `--max-submits` | 10 | The contract's own cap |
 | `--reroll-factor` | 2 | Resubmit only on an improvement this large |
 | `--lead-ms` | 6000 | Submit this long before the epoch closes |
-| `--gas-limit` | 500000 | Per submission |
+| `--gas-limit` | 1400000 | Per submission |
 | `--once` | | Mine a single epoch and exit |
+
+The gas limit is sized to carry an auto-LP deposit, not a bare submission. Every 60th
+epoch the contract folds accrued fees into the Uniswap position from inside whichever
+submission opens that epoch, and it stands down unless 700,000 gas is still left when it
+gets there. A limit that cannot cover the deposit does not fail — the submission lands
+normally and the deposit is silently deferred to the next epoch, then the next, forever.
+Unused gas is refunded, so the headroom costs nothing on the submissions that do not use it.
 
 ## How the search is split
 

@@ -71,6 +71,7 @@ history or a process listing.
 | `--max-submits` | 10 | The contract's own cap |
 | `--reroll-factor` | 2 | Resubmit only on an improvement this large |
 | `--lead-ms` | 6000 | Submit this long before the epoch closes |
+| `--gas-limit` | 1400000 | Sized to carry an auto-LP deposit; unused gas is refunded |
 | `--once` | | Mine a single epoch and exit |
 
 **Windows toolchain.** With `x86_64-pc-windows-gnu`, rustup's bundled mingw ships `dlltool`

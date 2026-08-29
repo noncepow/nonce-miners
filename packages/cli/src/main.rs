@@ -44,8 +44,10 @@ struct Args {
     #[arg(long, default_value_t = 6_000)]
     lead_ms: i64,
 
-    /// Gas limit per submission.
-    #[arg(long, default_value_t = 500_000)]
+    /// Gas limit per submission. Sized to carry an auto-LP deposit, which the
+    /// contract stands down from unless 700k gas remains. Unused gas is
+    /// refunded, so the headroom is free on the submissions that do not use it.
+    #[arg(long, default_value_t = 1_400_000)]
     gas_limit: u64,
 
     /// Mine a single epoch and exit.

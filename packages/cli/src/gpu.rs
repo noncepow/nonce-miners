@@ -27,7 +27,25 @@ pub struct Gpu {
 }
 
 impl Gpu {
+    /// cudarc loads the CUDA and nvrtc shared libraries lazily and **panics** if
+    /// either is missing rather than returning an error, so `?` never sees it.
+    /// Left alone, "this machine has no CUDA" reaches the user as a Rust
+    /// backtrace and makes the GPU tests fail instead of skipping. Contain the
+    /// unwind here so the rest of the program can treat it as the ordinary
+    /// error it is. The hook is silenced only across this call, before any
+    /// worker threads exist.
     pub fn new() -> Result<Self, String> {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let outcome = std::panic::catch_unwind(Self::init);
+        std::panic::set_hook(previous);
+
+        outcome.unwrap_or_else(|_| {
+            Err("CUDA is not loadable on this machine - needs an Nvidia driver and nvrtc64_*.dll on PATH".into())
+        })
+    }
+
+    fn init() -> Result<Self, String> {
         let device = CudaDevice::new(0).map_err(|e| format!("no CUDA device: {e}"))?;
         let name = device.name().unwrap_or_else(|_| "CUDA device".into());
 
