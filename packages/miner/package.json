@@ -1,0 +1,19 @@
+{
+  "name": "@nonce/miner",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Keccak256 proof-of-work miner for NONCE — browser Web Worker and Node.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./worker": "./src/worker.js"
+  },
+  "bin": { "nonce-mine": "./bin/mine.js" },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.7.1",
+    "viem": "^2.21.0"
+  }
+}

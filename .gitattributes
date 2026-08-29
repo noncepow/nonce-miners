@@ -1,0 +1,19 @@
+# Normalise to LF in the repository; check out native on each platform.
+# Without this every commit from Windows prints a wall of CRLF warnings and
+# diffs churn between contributors on different systems.
+* text=auto eol=lf
+
+*.sol   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+*.png   binary
+*.webp  binary
+*.jpg   binary

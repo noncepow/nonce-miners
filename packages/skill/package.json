@@ -1,0 +1,9 @@
+{
+  "name": "@nonce/skill",
+  "version": "0.1.0",
+  "description": "Agent skill for setting up and operating a NONCE miner.",
+  "type": "module",
+  "files": ["SKILL.md", "scripts"],
+  "scripts": { "preflight": "node scripts/preflight.mjs" },
+  "dependencies": { "viem": "^2.21.0" }
+}
