@@ -104,7 +104,28 @@ gone with it.
 `nonce-miner status` answers, in one place, every question that otherwise costs you a
 failed run: is the chain reachable, is there a contract at that address, what does an
 epoch pay right now, does this wallet have a usable key, how many submissions can it
-afford, and is a GPU actually available.
+afford, is a GPU actually available — and where you stand:
+
+```
+network
+  ok   ~774.77 MH/s across the field
+  ok   median of the last 25 epochs — the mean of this quantity does not converge
+  ok   rough: expect it within a factor of two, and biased high by staking
+
+rewards
+  ok   1,392.5668 NONCE in the wallet
+  ok   9,079.7817 NONCE unclaimed — claim it to move it into the wallet
+  ok   100.0000 NONCE staked
+  ok   100.00% of epoch 54 was yours
+```
+
+While mining, each closed epoch reports your rate and your share of it.
+
+The network figure is an estimate, and deliberately labelled as one. A score is
+`2^256 / digest`, so a best-of-N search scores about N — but the *mean* of that quantity
+does not exist, and averaging it never settles: against a miner holding a flat 478 MH/s a
+running mean climbed past 1.5 GH/s and kept climbing. The median behaves, so that is what
+is quoted.
 
 | Backend | Hashrate |
 |---|---|

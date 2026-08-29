@@ -102,6 +102,26 @@ impl Rpc {
         hex_u256(&v)
     }
 
+    /// A view returning several words — a struct getter such as
+    /// `epochs(uint256)` or `minerEpoch(address,uint256)`.
+    pub fn view_words(&self, to: &[u8; 20], data: &[u8], words: usize) -> Result<Vec<U256>, RpcError> {
+        let v = self.call(
+            "eth_call",
+            json!([{ "to": hex_addr(to), "data": format!("0x{}", hex::encode(data)) }, "latest"]),
+        )?;
+        let raw = v.as_str().unwrap_or_default().trim_start_matches("0x");
+        let bytes = hex::decode(raw).map_err(|e| RpcError::Decode(e.to_string()))?;
+        let mut out = Vec::with_capacity(words);
+        for i in 0..words {
+            let start = i * 32;
+            if start + 32 > bytes.len() {
+                return Err(RpcError::Decode(format!("wanted {words} words, got {} bytes", bytes.len())));
+            }
+            out.push(U256::from_big_endian(&bytes[start..start + 32]));
+        }
+        Ok(out)
+    }
+
     pub fn send_raw(&self, raw: &[u8]) -> Result<String, RpcError> {
         let v = self.call("eth_sendRawTransaction", json!([format!("0x{}", hex::encode(raw))]))?;
         Ok(v.as_str().unwrap_or_default().to_string())

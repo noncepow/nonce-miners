@@ -15,7 +15,17 @@ import { parseEther } from "viem";
 import { z } from "zod";
 
 import { ConfigError, NoWalletError, loadConfig } from "./config.js";
-import { compact, connect, formatEth, formatToken, read, write, type Chain } from "./chain.js";
+import {
+  compact,
+  connect,
+  epochShare,
+  formatEth,
+  formatToken,
+  networkHashrate,
+  read,
+  write,
+  type Chain,
+} from "./chain.js";
 import { MiningSession, shortError } from "./session.js";
 import { ExternalMiner, locateBinary, probeBinary } from "./external.js";
 
@@ -177,6 +187,12 @@ Examples:
         const secondsLeft = Math.max(0, endsAt - Math.floor(Date.now() / 1000));
         const mining = activeSnapshot();
 
+        // What everyone else is doing, and what of the last epoch was yours.
+        const [network, share] = await Promise.all([
+          networkHashrate(chain, epoch, Number(epochDuration)).catch(() => null),
+          wallet && epoch > 0n ? epochShare(chain, wallet, epoch - 1n).catch(() => null) : null,
+        ]);
+
         const data = {
           wallet,
           epoch: epoch.toString(),
@@ -190,6 +206,11 @@ Examples:
             lastError: mining.lastError,
             backend: mining.running ? activeBackend() : null,
           },
+          network: {
+            hashrate: network,
+            note: "median over recent epochs; within a factor of two, biased high by staking",
+          },
+          lastEpochSharePercent: share,
           rewards,
           eth,
         };
@@ -203,6 +224,9 @@ Examples:
             : "Not mining. Use `nonce_start_mining` to begin.",
           "",
           `Unclaimed **${rewards.unclaimed} NONCE** · wallet ${rewards.balance} · staked ${rewards.staked}`,
+          network !== null
+            ? `Network ~${compact(network)}H/s estimated${share !== null ? ` · ${share.toFixed(2)}% of epoch ${epoch - 1n} was yours` : ""}`
+            : "Network idle — nobody mined recently, so there is nothing to estimate from",
           `Multiplier ${rewards.multiplier} (2x at ${rewards.stakeTarget} staked) · ${eth} ETH for fees`,
           mining.lastError ? `\n_Last error: ${mining.lastError}_` : "",
         ].join("\n");

@@ -301,6 +301,56 @@ balance");
         None => println!("  n/a  no wallet to check"),
     }
 
+    println!("
+network");
+    let e = epoch.as_u64();
+    let epoch_duration = rpc
+        .view(&token, &call_data("EPOCH_DURATION()", &[]))
+        .map_err(|e| e.to_string())?
+        .as_u64();
+    match network_hashrate(&rpc, &token, e, epoch_duration) {
+        Some(hs) => {
+            let submits = epoch_totals(&rpc, &token, e - 1).map(|t| t.2).unwrap_or(0);
+            println!("  ok   ~{} across the field", fmt_hashrate(hs));
+            println!("  ok   median of the last {NETWORK_WINDOW} epochs — the mean of this quantity does not converge");
+            println!("  ok   rough: expect it within a factor of two, and biased high by staking");
+            println!("  ok   {submits} submissions in epoch {}", e - 1);
+        }
+        None => println!("  none nobody mined the last epoch, so there is nothing to estimate from"),
+    }
+
+    if let Some(addr) = who {
+        println!("
+rewards");
+        let bal = rpc
+            .view(&token, &call_data("balanceOf(address)", &[addr_word(&addr)]))
+            .map_err(|e| e.to_string())?;
+        let pending = rpc
+            .view(
+                &token,
+                &call_data("pendingRewards(address,uint256)", &[addr_word(&addr), U256::from(500u64)]),
+            )
+            .map_err(|e| e.to_string())?;
+        let staked = rpc
+            .view(&token, &call_data("staked(address)", &[addr_word(&addr)]))
+            .map_err(|e| e.to_string())?;
+        println!("  ok   {} NONCE in the wallet", fmt_nonce(bal));
+        if pending.is_zero() {
+            println!("  ok   nothing unclaimed");
+        } else {
+            println!("  ok   {} NONCE unclaimed — claim it to move it into the wallet", fmt_nonce(pending));
+        }
+        if !staked.is_zero() {
+            println!("  ok   {} NONCE staked", fmt_nonce(staked));
+        }
+        if e > 0 {
+            match my_share(&rpc, &token, &addr, e - 1) {
+                Some(pct) => println!("  ok   {pct:.2}% of epoch {} was yours", e - 1),
+                None => println!("  ok   you did not mine epoch {}", e - 1),
+            }
+        }
+    }
+
     #[cfg(feature = "gpu")]
     {
         println!("
@@ -312,6 +362,124 @@ GPU");
     }
 
     Ok(())
+}
+
+
+/// U256 to f64. Only for display: the value can exceed u128, so `as_u128`
+/// would panic on a busy epoch.
+fn u256_to_f64(v: U256) -> f64 {
+    let mut out = 0f64;
+    for i in (0..4).rev() {
+        out = out * 18_446_744_073_709_551_616.0 + v.0[i] as f64;
+    }
+    out
+}
+
+/// 18-decimal amount, four places, with thousands separators.
+fn fmt_nonce(v: U256) -> String {
+    let wad = U256::from(10u64).pow(U256::from(18u64));
+    let whole = (v / wad).as_u128();
+    let frac = ((v % wad) / U256::from(10u64).pow(U256::from(14u64))).as_u64();
+    let mut group = String::new();
+    for (i, c) in whole.to_string().chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            group.push(',');
+        }
+        group.push(c);
+    }
+    format!("{}.{:04}", group.chars().rev().collect::<String>(), frac)
+}
+
+fn fmt_hashrate(hs: f64) -> String {
+    const UNITS: [(&str, f64); 5] =
+        [("TH/s", 1e12), ("GH/s", 1e9), ("MH/s", 1e6), ("KH/s", 1e3), ("H/s", 1.0)];
+    for (name, scale) in UNITS {
+        if hs >= scale {
+            return format!("{:.2} {name}", hs / scale);
+        }
+    }
+    format!("{hs:.0} H/s")
+}
+
+fn addr_word(a: &[u8; 20]) -> U256 {
+    U256::from_big_endian(a)
+}
+
+/// `epochs(uint256)` -> (minerPot, totalScore, submits).
+fn epoch_totals(rpc: &Rpc, token: &[u8; 20], e: u64) -> Option<(U256, U256, u64)> {
+    let w = rpc.view_words(token, &call_data("epochs(uint256)", &[U256::from(e)]), 3).ok()?;
+    Some((w[0], w[1], w[2].as_u64()))
+}
+
+/// The network's hashrate, estimated from an epoch's total score.
+///
+/// A score is `2^256 / digest`, and the best of N uniform draws lands near
+/// `2^256 / N`, so a miner's best score is roughly how many hashes they tried.
+/// Summing those over an epoch and dividing by its length gives the field's
+/// combined rate.
+///
+/// It reads high. Staking multiplies a score by up to 2x without any extra
+/// hashing, so a heavily staked field inflates the estimate — which is why this
+/// is labelled as an estimate everywhere it is shown.
+/// The **median** of the last `NETWORK_WINDOW` settled epochs, not the mean.
+///
+/// A score is `2^256 / digest`. For a best-of-N search the smallest digest sits
+/// near `2^256 / N`, so a score is roughly the hashes tried — but the *mean* of
+/// that quantity does not exist: `E[1/min(U_1..U_N)]` diverges. Averaging it
+/// therefore never settles. Observed here on a miner holding a flat 478 MH/s,
+/// the running mean climbed 527 MH/s, 1.25 GH/s, 1.52 GH/s, 1.59 GH/s and kept
+/// going, because one lucky epoch dominates every epoch after it.
+///
+/// The median is well behaved: for best-of-N it lands at about `N / ln 2`, so
+/// it tracks the real rate instead of drifting.
+///
+/// It still reads high, by up to 2x: staking multiplies a score without any
+/// extra hashing. Shown as an estimate everywhere, because that is what it is.
+/// Wide, because the estimator needs samples. This runs only in `status`, where
+/// a couple of seconds of RPC costs nothing — the mining loop must not spend it,
+/// since those seconds come straight out of the next epoch's search.
+const NETWORK_WINDOW: u64 = 25;
+
+fn network_hashrate(rpc: &Rpc, token: &[u8; 20], epoch: u64, epoch_duration: u64) -> Option<f64> {
+    if epoch == 0 || epoch_duration == 0 {
+        return None;
+    }
+    // The epoch in progress is still filling up; only closed ones are settled.
+    let newest = epoch - 1;
+    let oldest = newest.saturating_sub(NETWORK_WINDOW - 1);
+
+    let mut scores: Vec<f64> = Vec::new();
+    for e in oldest..=newest {
+        if let Some((_, score, _)) = epoch_totals(rpc, token, e) {
+            if !score.is_zero() {
+                scores.push(u256_to_f64(score));
+            }
+        }
+    }
+    if scores.is_empty() {
+        return None;
+    }
+    scores.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = scores[scores.len() / 2];
+
+    // Best-of-N has median score N / ln 2, so divide it back out.
+    Some(median * std::f64::consts::LN_2 / epoch_duration as f64)
+}
+
+/// The caller's share of a settled epoch's reward, as a percentage.
+fn my_share(rpc: &Rpc, token: &[u8; 20], me: &[u8; 20], e: u64) -> Option<f64> {
+    let (_, total_score, _) = epoch_totals(rpc, token, e)?;
+    if total_score.is_zero() {
+        return None;
+    }
+    let mine = rpc
+        .view_words(
+            token,
+            &call_data("minerEpoch(address,uint256)", &[addr_word(me), U256::from(e)]),
+            3,
+        )
+        .ok()?;
+    Some(u256_to_f64(mine[0]) / u256_to_f64(total_score) * 100.0)
 }
 
 fn parse_address(s: &str) -> Result<[u8; 20], String> {
@@ -456,9 +624,16 @@ address 0x{}", hex::encode(w.address));
             if let Some(s) = session.take() {
                 let hashes = s.hashes();
                 let secs = started.elapsed().as_secs_f64().max(0.001);
+                // The epoch just closed, so its totals are settled: a rate on its
+                // own says nothing about whether it won anything. One extra read,
+                // deliberately — the network estimate needs many, and those
+                // seconds would come out of the next epoch's search.
+                let share = my_share(&rpc, &token, &wallet.address, current_epoch)
+                    .map(|p| format!(" · your share {p:.2}%"))
+                    .unwrap_or_default();
                 println!(
-                    "  epoch {current_epoch} done: {hashes} hashes, ~{:.2} MH/s",
-                    hashes as f64 / secs / 1e6
+                    "  epoch {current_epoch} done: {hashes} hashes, ~{}{share}",
+                    fmt_hashrate(hashes as f64 / secs)
                 );
                 s.stop();
                 if args.once {
