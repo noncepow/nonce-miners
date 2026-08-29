@@ -182,6 +182,22 @@ fn run() -> Result<(), String> {
         return wallet_command(action);
     }
 
+    // Arguments before the wallet: unlocking the keystore prompts for a
+    // password, and being asked for one only to be told the address was missing
+    // wastes the entry and reads as though the password was the problem.
+    //
+    // An unset shell variable expands to an empty argument, so `--address
+    // "$NONCE_ADDRESS"` with nothing set arrives as Some(""). Calling that a
+    // malformed address sends you looking at the address rather than at the
+    // variable that was never set.
+    let present = |v: &Option<String>| -> Option<String> {
+        v.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned)
+    };
+    let address =
+        present(&args.address).ok_or("set --address, or NONCE_ADDRESS — it is empty or unset")?;
+    let rpc_url = present(&args.rpc).ok_or("set --rpc, or NONCE_RPC_URL — it is empty or unset")?;
+    let token = parse_address(&address)?;
+
     // Never an argument, so the key cannot land in shell history or a process
     // listing. The environment still wins, so existing setups keep working; the
     // keystore is the fallback for everyone who would otherwise have kept the
@@ -191,13 +207,7 @@ fn run() -> Result<(), String> {
         Err(_) => keystore::load()?,
     };
 
-    let address = args
-        .address
-        .as_deref()
-        .ok_or("set --address (or NONCE_ADDRESS) to the NONCE token")?;
-    let rpc_url = args.rpc.as_deref().ok_or("set --rpc (or NONCE_RPC_URL)")?;
-    let token = parse_address(address)?;
-    let rpc = Rpc::new(rpc_url);
+    let rpc = Rpc::new(&rpc_url);
     let threads = args
         .threads
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1)));
