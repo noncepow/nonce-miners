@@ -51,6 +51,46 @@ struct Args {
     /// Mine a single epoch and exit.
     #[arg(long)]
     once: bool,
+
+    /// Use the CUDA backend. Requires an Nvidia driver and nvrtc on PATH.
+    #[arg(long)]
+    gpu: bool,
+
+    /// Nonces per GPU launch. Larger keeps the card busy; smaller hands control
+    /// back sooner when the epoch rolls over.
+    #[arg(long, default_value_t = 1_048_576)]
+    gpu_batch: u32,
+}
+
+/// One search, whichever backend is driving it.
+enum Backend {
+    Cpu(Session),
+    #[cfg(feature = "gpu")]
+    Gpu(nonce_miner::gpu::GpuSession),
+}
+
+impl Backend {
+    fn best(&self) -> Option<nonce_miner::miner::Solution> {
+        match self {
+            Backend::Cpu(s) => s.best(),
+            #[cfg(feature = "gpu")]
+            Backend::Gpu(s) => s.best(),
+        }
+    }
+    fn hashes(&self) -> u64 {
+        match self {
+            Backend::Cpu(s) => s.hashes(),
+            #[cfg(feature = "gpu")]
+            Backend::Gpu(s) => s.hashes(),
+        }
+    }
+    fn stop(self) {
+        match self {
+            Backend::Cpu(s) => s.stop(),
+            #[cfg(feature = "gpu")]
+            Backend::Gpu(s) => s.stop(),
+        }
+    }
 }
 
 fn main() {
@@ -99,7 +139,15 @@ fn run() -> Result<(), String> {
 
     println!("miner    0x{}", hex::encode(wallet.address));
     println!("contract 0x{}  (chain {chain_id})", hex::encode(token));
-    println!("threads  {threads}");
+    if args.gpu {
+        #[cfg(feature = "gpu")]
+        {
+            let probe = nonce_miner::gpu::Gpu::new()?;
+            println!("backend  CUDA on {}", probe.name);
+        }
+    } else {
+        println!("backend  CPU, {threads} threads");
+    }
     println!("epoch    {epoch_duration}s   fee {} wei/submit", fee);
     println!("balance  {} wei", balance);
     if balance.is_zero() {
@@ -122,7 +170,7 @@ fn run() -> Result<(), String> {
     let mut skew_ms = chain_now * 1000 - now_ms();
 
     let mut current_epoch = u64::MAX;
-    let mut session: Option<Session> = None;
+    let mut session: Option<Backend> = None;
     let mut submitted: Option<U256> = None;
     let mut submits = 0u32;
     let mut started = Instant::now();
@@ -164,11 +212,25 @@ fn run() -> Result<(), String> {
             submitted = None;
             submits = 0;
             started = Instant::now();
-            session = Some(Session::start(
-                Job { challenge, miner: wallet.address, target, epoch },
-                threads,
-                rand_base(),
-            ));
+            let job = Job { challenge, miner: wallet.address, target, epoch };
+            session = Some(if args.gpu {
+                #[cfg(feature = "gpu")]
+                {
+                    let gpu = nonce_miner::gpu::Gpu::new()?;
+                    Backend::Gpu(nonce_miner::gpu::GpuSession::start(
+                        gpu,
+                        job,
+                        rand_base(),
+                        args.gpu_batch,
+                    ))
+                }
+                #[cfg(not(feature = "gpu"))]
+                {
+                    return Err("this build has no GPU support; rebuild with --features gpu".into());
+                }
+            } else {
+                Backend::Cpu(Session::start(job, threads, rand_base()))
+            });
         }
 
         if let Some(s) = &session {

@@ -7,7 +7,7 @@ See [WHITEPAPER.md](WHITEPAPER.md) for the protocol itself.
 
 | | |
 |---|---|
-| `packages/cli` | Rust, multi-threaded. 2.09 MH/s per thread |
+| `packages/cli` | Rust. CUDA at 449 MH/s, or multi-threaded CPU at 2.09 MH/s per thread |
 | `packages/miner` | JavaScript. Browser Web Worker and a Node CLI |
 | `packages/mcp-server` | Mine from any MCP-compatible agent |
 | `packages/skill` | Agent skill: preflight and operating procedure |
@@ -47,8 +47,20 @@ cd packages/cli
 cargo build --release
 
 export NONCE_PRIVATE_KEY=0x...
-./target/release/nonce-miner --rpc https://... --address 0x...
+./target/release/nonce-miner --rpc https://... --address 0x...   # CPU
+./target/release/nonce-miner --gpu --rpc https://... --address 0x...   # CUDA
 ```
+
+| Backend | Hashrate |
+|---|---|
+| Browser / Node, 1 thread | 70 KH/s |
+| Rust CPU, 4 threads | 8.36 MH/s |
+| CUDA, RTX 4060 | **449 MH/s** |
+
+The GPU path needs an Nvidia driver and `nvrtc64_*.dll` on PATH — no CUDA toolkit. Every
+hit the kernel reports is re-hashed on the CPU before use, because a wrong kernel returns
+plausible digests the contract rejects rather than raising an error. See
+[packages/cli/README.md](packages/cli/README.md).
 
 The key is read from the environment only — never an argument, so it cannot land in shell
 history or a process listing.

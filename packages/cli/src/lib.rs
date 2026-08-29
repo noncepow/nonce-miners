@@ -2,6 +2,9 @@
 //! hash and the search without going through the binary.
 
 pub mod hash;
+
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod miner;
 pub mod rpc;
 pub mod strategy;

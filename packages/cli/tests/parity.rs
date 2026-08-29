@@ -1,8 +1,8 @@
 //! The Rust miner's digest must match the contract byte for byte.
 //!
-//! The vectors in `tests/vectors.json` were produced by the EVM itself, by the
-//! contract's own DigestVectors script, not by another Rust or JavaScript
-//! implementation. Checking one implementation against another only
+//! The vectors in `tests/vectors.json` were produced by the EVM itself, via
+//! `packages/contracts/script/DigestVectors.s.sol`, not by another Rust or
+//! JavaScript implementation. Checking one implementation against another only
 //! proves they agree with each other; the contract is the authority.
 //!
 //! A one-byte disagreement here does not throw. It makes every solution this

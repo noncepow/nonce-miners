@@ -74,9 +74,43 @@ The epoch deadline is measured against a block timestamp, not the host clock. A 
 running a few seconds behind believes it still has time, submits against a challenge that
 has already rotated, and pays gas for a guaranteed revert.
 
-## Not yet done: GPU
+## GPU
 
-This is CPU-only. The specification leaves the GPU backend open between wgpu
-(cross-platform) and CUDA (Nvidia, faster), and a keccak256 shader is not something worth
-shipping untested — an incorrect one produces valid-looking hashes that the contract
-rejects, which is the same silent failure the parity vectors exist to prevent.
+```bash
+nonce-miner --gpu --rpc https://... --address 0x...
+```
+
+Measured on an RTX 4060:
+
+| Backend | Hashrate | vs browser |
+|---|---|---|
+| Browser / Node, 1 thread | 70 KH/s | 1x |
+| Rust CPU, 1 thread | 2.09 MH/s | 30x |
+| Rust CPU, 4 threads | 8.36 MH/s | 119x |
+| CUDA, RTX 4060 | **449 MH/s** | **6,413x** |
+
+Requirements: an Nvidia driver, and `nvrtc64_*.dll` on PATH. **No CUDA toolkit is needed** —
+the kernel is compiled at runtime by nvrtc and launched through the driver API. If you do
+not have the toolkit, the nvrtc DLLs alone are about 20 MB:
+
+```bash
+pip install nvidia-cuda-nvrtc-cu12
+# then add .../site-packages/nvidia/cuda_nvrtc/bin to PATH
+```
+
+`--gpu-batch` sets nonces per launch (default 1,048,576). Larger keeps the card busy;
+smaller hands control back sooner when the epoch rolls over.
+
+### Why the GPU is never trusted
+
+Every hit the kernel reports is **re-hashed on the CPU** before it is used. A wrong kernel
+does not raise an error — it returns plausible-looking digests that the contract rejects
+every time, which reads as persistent bad luck rather than a bug. The GPU proposes
+candidates; the CPU decides.
+
+`tests/gpu_parity.rs` reads digests straight out of the GPU buffer with no CPU
+re-verification in between, and compares them against the contract's own vectors. Filtering
+through the CPU check first would hide exactly the bug the test exists to catch.
+
+CUDA rather than a portable backend is a deliberate trade: it is Nvidia-only, so AMD and
+Apple Silicon miners use the CPU path.
