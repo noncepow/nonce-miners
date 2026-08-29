@@ -46,7 +46,12 @@ struct Args {
     reroll_factor: u64,
 
     /// Submit once the epoch has this many milliseconds left.
-    #[arg(long, default_value_t = 6_000)]
+    ///
+    /// The budget has to cover the account-nonce read, signing, broadcast and
+    /// inclusion. Measured on Robinhood Chain: 1.4-2.6s to confirm, and the
+    /// first submission of an epoch also opens it and retargets, so it is
+    /// slower still. 6s left barely any margin and lost the occasional race.
+    #[arg(long, default_value_t = 12_000)]
     lead_ms: i64,
 
     /// Gas limit per submission. Sized to carry an auto-LP deposit, which the
@@ -257,6 +262,8 @@ fn run() -> Result<(), String> {
     let mut skew_ms = chain_now * 1000 - now_ms();
 
     let mut current_epoch = u64::MAX;
+    let mut epoch_fee = U256::zero();
+    let mut epoch_gas_price = U256::zero();
     let mut session: Option<Backend> = None;
     let mut submitted: Option<U256> = None;
     let mut submits = 0u32;
@@ -290,6 +297,13 @@ fn run() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             let chain_now = rpc.block_timestamp().map_err(|e| e.to_string())? as i64;
             skew_ms = chain_now * 1000 - now_ms();
+
+            // Read once per epoch, not once per submission. Both are stable
+            // within an epoch, and a submission is made against a deadline
+            // measured in seconds — three sequential round trips before the
+            // transaction is even signed is most of that budget.
+            epoch_fee = rpc.view(&token, &call_data("submitFee()", &[])).map_err(|e| e.to_string())?;
+            epoch_gas_price = rpc.gas_price().map_err(|e| e.to_string())?;
 
             let mut challenge = [0u8; 32];
             challenge_word.to_big_endian(&mut challenge);
@@ -326,7 +340,25 @@ fn run() -> Result<(), String> {
 
             if should_submit(best.as_ref().map(|b| b.score), submitted, submits, left, &strategy) {
                 if let Some(b) = best {
-                    match submit(&rpc, &wallet, &token, chain_id, b.nonce, &args) {
+                    // The contract recomputes the digest against whatever epoch
+                    // the transaction lands in, so a solution that arrives after
+                    // the rotation is hashed with a different challenge and
+                    // rejected as AboveTarget — indistinguishable from bad luck.
+                    // Better to drop it than to pay gas for a certain revert.
+                    if ms_left(genesis, epoch, epoch_duration, skew_ms) <= 0 {
+                        eprintln!("  epoch {epoch} rolled before the submission went out; dropped");
+                        continue;
+                    }
+                    match submit(
+                        &rpc,
+                        &wallet,
+                        &token,
+                        chain_id,
+                        b.nonce,
+                        &args,
+                        epoch_fee,
+                        epoch_gas_price,
+                    ) {
                         Ok(hash) => {
                             submits += 1;
                             submitted = Some(b.score);
@@ -346,6 +378,7 @@ fn run() -> Result<(), String> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn submit(
     rpc: &Rpc,
     wallet: &Wallet,
@@ -353,10 +386,12 @@ fn submit(
     chain_id: u64,
     nonce_value: U256,
     args: &Args,
+    fee: U256,
+    gas_price: U256,
 ) -> Result<String, String> {
-    let fee = rpc.view(token, &call_data("submitFee()", &[])).map_err(|e| e.to_string())?;
+    // Only the account nonce has to be fresh; the fee and the gas price were
+    // read when the epoch opened.
     let tx_nonce = rpc.tx_count(&wallet.address).map_err(|e| e.to_string())?;
-    let gas_price = rpc.gas_price().map_err(|e| e.to_string())?;
 
     // Headroom over the observed base fee so a submission is not stranded when
     // the epoch's first transaction bumps the price.

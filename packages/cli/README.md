@@ -86,7 +86,7 @@ listing, and it is never printed.
 | `--threads` | cores − 1 | Leaves the machine usable while mining |
 | `--max-submits` | 10 | The contract's own cap |
 | `--reroll-factor` | 2 | Resubmit only on an improvement this large |
-| `--lead-ms` | 6000 | Submit this long before the epoch closes |
+| `--lead-ms` | 12000 | Submit this long before the epoch closes |
 | `--gas-limit` | 1400000 | Per submission |
 | `--once` | | Mine a single epoch and exit |
 
@@ -112,6 +112,14 @@ bytes rather than thirty-two and allocates nothing.
 The epoch deadline is measured against a block timestamp, not the host clock. A machine
 running a few seconds behind believes it still has time, submits against a challenge that
 has already rotated, and pays gas for a guaranteed revert.
+
+The contract recomputes the digest against whichever epoch the transaction *lands* in, so
+a submission that arrives a moment late is hashed with a different challenge and rejected
+as `AboveTarget` — which reads as bad luck, not as a missed deadline. `--lead-ms` has to
+cover the account-nonce read, signing, broadcast and inclusion; measured on Robinhood
+Chain that is 1.4-2.6s, and the first submission of an epoch also opens it and retargets.
+The fee and gas price are read once when the epoch opens rather than per submission, so
+they are not three more round trips inside that window.
 
 ## GPU
 
@@ -170,7 +178,8 @@ export LD_LIBRARY_PATH=$HOME/.nonce-cuda/nvidia/cuda_nvrtc/lib:/usr/lib/wsl/lib:
 without it they skip, and a skipped parity test proves nothing.
 
 One trap: a `.env` written on Windows has CRLF line endings, so a key sourced from it in
-WSL carries a trailing carriage return and is rejected as 33 bytes. `tr -d ''` first.
+WSL carries a trailing carriage return and is rejected as 33 bytes. `tr -d '
+'` first.
 
 ### Why the GPU is never trusted
 
