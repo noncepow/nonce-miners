@@ -2,7 +2,7 @@
 
 **A proof-of-work token that funds its own liquidity**
 
-Version 1.0 · Robinhood Chain (4663)
+Version 1.0 · Robinhood Chain (4663) · [nonce-spec.md](nonce-spec.md) is the normative specification
 
 ---
 
@@ -214,6 +214,18 @@ The token side of the pool is the 210,000 seed plus 4% of every epoch. The ETH s
 of every submit fee. Roughly hourly, the contract pairs what has accumulated into a
 NONCE/ETH position on Uniswap v4.
 
+| Source | Side | Amount | When |
+|---|---|---|---|
+| LP seed | NONCE | 210,000, carved out of the 21M cap | once, at deploy |
+| Epoch tax | NONCE | 4% of the epoch's emission | every epoch |
+| Submit fee | ETH | half of every fee | every submission |
+| Deposit | both | everything accumulated, paired | every 60 epochs |
+| Trading fees | both | 1% of pool volume | harvested to the treasury |
+
+Nothing in that table flows the other way. There is no entry for a withdrawal, because no
+function decreases or burns the position — the only value that ever leaves is trading fees,
+and those go to an account that can actually move them.
+
 Three properties matter, and each addresses a specific way this goes wrong in practice:
 
 **The position is genuinely full range.** Ticks are `−887200` and `887200`, aligned to a tick
@@ -354,3 +366,4 @@ via fork testing. They have not been audited by a third party.
 - 0xBitcoin — EIP-918 mineable token standard.
 - ORE — proportional proof-of-work distribution.
 - Uniswap v4 — [developers.uniswap.org/docs/protocols/v4](https://developers.uniswap.org/docs/protocols/v4/deployments)
+- Full technical specification: [nonce-spec.md](nonce-spec.md)
