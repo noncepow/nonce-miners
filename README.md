@@ -10,6 +10,18 @@ operating procedure that goes with it.
 
 See [WHITEPAPER.md](WHITEPAPER.md) for the protocol itself.
 
+**Live on Robinhood Chain mainnet (4663).** Token
+[`0xadf0ab9d892F7d9B82935364A2f623480a19681F`](https://robinhoodchain.blockscout.com/address/0xadf0ab9d892F7d9B82935364A2f623480a19681F),
+verified on Blockscout. Not audited by a third party — read the limitations in the
+whitepaper before committing hardware or funds.
+
+```bash
+export NONCE_RPC_URL=https://rpc.mainnet.chain.robinhood.com
+export NONCE_ADDRESS=0xadf0ab9d892F7d9B82935364A2f623480a19681F
+```
+
+With those exported, every command below works as written.
+
 ---
 
 ## Quick start
@@ -31,7 +43,7 @@ nonce-miner --gpu          # mine
 **Node miner** — nothing to install:
 
 ```bash
-npx -y @noncepow/miner --rpc https://... --address 0x...
+npx -y @noncepow/miner
 ```
 
 **Agent** — put this in your MCP client's config and ask it to mine:
@@ -43,8 +55,8 @@ npx -y @noncepow/miner --rpc https://... --address 0x...
       "command": "npx",
       "args": ["-y", "@noncepow/mcp-server"],
       "env": {
-        "NONCE_RPC_URL": "https://...",
-        "NONCE_ADDRESS": "0x...",
+        "NONCE_RPC_URL": "https://rpc.mainnet.chain.robinhood.com",
+        "NONCE_ADDRESS": "0xadf0ab9d892F7d9B82935364A2f623480a19681F",
         "NONCE_PRIVATE_KEY": "0x..."
       }
     }
@@ -164,10 +176,11 @@ challenge and rejected, which reads as bad luck rather than a missed deadline.
 ## Node miner (JavaScript)
 
 ```bash
-npx -y @noncepow/miner --rpc https://... --address 0x...
+npx -y @noncepow/miner
 ```
 
-Reads `NONCE_PRIVATE_KEY` from the environment. The same module drives the browser miner
+Reads `NONCE_RPC_URL`, `NONCE_ADDRESS`, and `NONCE_PRIVATE_KEY` from the environment;
+`--rpc` and `--address` override the first two. The same module drives the browser miner
 through a Web Worker — see [packages/miner/README.md](packages/miner/README.md).
 
 In the browser the site uses WebGPU when the machine has it, and falls back to those

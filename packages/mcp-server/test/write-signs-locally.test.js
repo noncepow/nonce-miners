@@ -44,7 +44,7 @@ function fakeRpc() {
     contractAddress: null,
   };
   const answers = {
-    eth_chainId: "0xb626", // 46630
+    eth_chainId: "0x1237", // 4663
     eth_getTransactionCount: "0x0",
     eth_gasPrice: "0x3b9aca00",
     eth_maxPriorityFeePerGas: "0x3b9aca00",

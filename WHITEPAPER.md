@@ -330,9 +330,21 @@ proportional.
 LP fee destination. The constraints above bound what that control can do, but they do not
 eliminate it.
 
-**Current status is testnet.** The contracts are deployed and exercised on Robinhood Chain
-testnet (46630), with the auto-LP write path verified against the live Uniswap v4 deployment
-via fork testing. They have not been audited by a third party.
+**Deployed on Robinhood Chain mainnet (4663).**
+
+| | |
+|---|---|
+| Nonce | `0xadf0ab9d892F7d9B82935364A2f623480a19681F` |
+| AutoLP | `0xC86F6897bCeE878d38dbFCbdc03a608B3a7b71cD` |
+| Treasury | `0x2cEE8f80923e313C64795c90746f7395c6F74262` |
+
+Both are verified on Blockscout — a full bytecode match, not a partial one — so the
+source above can be read against what actually runs.
+
+Every mechanism described here ran on testnet (46630) first, against the same Uniswap v4
+deployment that mainnet uses: liquidity minted, fees harvested in both currencies, the
+seven-day lock enforced, and the difficulty retarget exercised. **They have not been
+audited by a third party.**
 
 ---
 

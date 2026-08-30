@@ -42,8 +42,8 @@ tool argument, and never print one back to the user.
       "command": "npx",
       "args": ["-y", "@noncepow/mcp-server"],
       "env": {
-        "NONCE_RPC_URL": "https://...",
-        "NONCE_ADDRESS": "0x...",
+        "NONCE_RPC_URL": "https://rpc.mainnet.chain.robinhood.com",
+        "NONCE_ADDRESS": "0xadf0ab9d892F7d9B82935364A2f623480a19681F",
         "NONCE_PRIVATE_KEY": "0x..."
       }
     }
