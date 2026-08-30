@@ -1,8 +1,8 @@
 {
   "name": "@noncepow/miner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
-  "description": "Keccak256 proof-of-work miner for NONCE \u2014 browser Web Worker and Node.",
+  "description": "Keccak256 proof-of-work miner for NONCE — browser Web Worker and Node.",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",

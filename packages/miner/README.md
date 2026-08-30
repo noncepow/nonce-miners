@@ -47,12 +47,24 @@ blocked through an epoch boundary would keep grinding a stale challenge.
 
 ### Node
 
+Against the live token on Robinhood Chain mainnet (4663):
+
+```bash
+export NONCE_RPC_URL=https://rpc.mainnet.chain.robinhood.com
+export NONCE_ADDRESS=0xadf0ab9d892F7d9B82935364A2f623480a19681F
+export NONCE_PRIVATE_KEY=0x...          # a funded key; submissions cost a fee
+npx -y @noncepow/miner
+```
+
+Or against a local chain:
+
 ```bash
 NONCE_ADDRESS=0x... NONCE_PRIVATE_KEY=0x... node bin/mine.js --rpc http://127.0.0.1:8545
 ```
 
 Flags: `--rpc` `--address` `--batch` `--max-submits` (1–10) `--lead-ms` `--once`.
-The key is read from the environment only — never pass it as an argument.
+`--rpc` and `--address` override `NONCE_RPC_URL` and `NONCE_ADDRESS`. The key is read from
+the environment only — never pass it as an argument.
 
 ## Submit strategy
 
